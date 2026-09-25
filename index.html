@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -237,12 +237,22 @@
       padding-right: 4px;
     }
 
+    /* Custom Scrollbar for Chat Box */
+    .chat-box::-webkit-scrollbar {
+      width: 4px;
+    }
+    .chat-box::-webkit-scrollbar-thumb {
+      background-color: #555;
+      border-radius: 4px;
+    }
+
     .msg {
       font-size: 13px;
       line-height: 1.4;
       padding: 8px 12px;
       border-radius: 2px;
       max-width: 92%;
+      word-wrap: break-word;
     }
 
     .msg.cortana {
@@ -296,10 +306,11 @@
       display: flex;
       align-items: center;
       padding: 0 12px;
+      gap: 8px;
     }
 
     .search-box input {
-      width: 100%;
+      flex: 1;
       background: transparent;
       border: none;
       outline: none;
@@ -309,6 +320,10 @@
 
     .search-box input::placeholder {
       color: var(--text-muted);
+    }
+
+    #sendBtn:hover {
+      fill: #ffffff !important;
     }
 
     /* Mic Button */
@@ -394,7 +409,10 @@
         </svg>
       </div>
       <div class="search-box">
-        <input type="text" id="searchInput" placeholder="Pregúntame cualquier cosa" />
+        <input type="text" id="searchInput" placeholder="Pregúntame cualquier cosa" autocomplete="off" />
+        <svg id="sendBtn" title="Send" style="width:16px; height:16px; fill:#a0a0a0; cursor:pointer; transition: fill 0.2s;" viewBox="0 0 24 24">
+          <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/>
+        </svg>
       </div>
       <div class="mic-btn" id="micBtn" title="Microphone">
         <svg viewBox="0 0 24 24">
@@ -532,6 +550,7 @@
     const menuToggle = document.getElementById('menuToggle');
     const mainStage = document.getElementById('mainStage');
     const searchInput = document.getElementById('searchInput');
+    const sendBtn = document.getElementById('sendBtn');
     const greetingText = document.getElementById('greetingText');
     const haloContainer = document.getElementById('haloContainer');
     const micBtn = document.getElementById('micBtn');
@@ -558,6 +577,11 @@
       langMenu.classList.remove('show');
     });
 
+    // BUG FIX: Evita que el menú de idiomas se cierre al hacer clic dentro
+    langMenu.addEventListener('click', (e) => {
+      e.stopPropagation();
+    });
+
     // Speech Recognition
     const synth = window.speechSynthesis;
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -575,7 +599,7 @@
       recognition.onresult = (e) => {
         const text = e.results[0][0].transcript;
         searchInput.value = text;
-        processQuery(text);
+        submitMessage();
       };
 
       recognition.onerror = () => {
@@ -626,29 +650,45 @@
       msg.className = `msg ${sender}`;
       msg.textContent = text;
       chatBox.appendChild(msg);
-      chatBox.scrollTop = chatBox.scrollHeight;
+      
+      // Auto-scroll al último mensaje
+      setTimeout(() => {
+        chatBox.scrollTop = chatBox.scrollHeight;
+      }, 50);
     }
 
+    // BUG FIX: Protección total en la síntesis de voz
     function speak(text) {
-      if (synth.speaking) synth.cancel();
+      if (!('speechSynthesis' in window) || !window.speechSynthesis) {
+        setHaloState('idle', uiLang[currentLang].greeting);
+        return;
+      }
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = uiLang[currentLang].langCode;
-      
-      const voices = synth.getVoices();
-      const matchVoice = voices.find(v => v.lang.startsWith(currentLang));
-      if (matchVoice) utterance.voice = matchVoice;
+      try {
+        if (synth.speaking) synth.cancel();
 
-      utterance.onstart = () => setHaloState('speaking', text);
-      utterance.onend = () => setHaloState('idle', uiLang[currentLang].greeting);
+        const utterance = new SpeechSynthesisUtterance(text);
+        utterance.lang = uiLang[currentLang].langCode;
+        
+        const voices = synth.getVoices();
+        if (voices && voices.length > 0) {
+          const matchVoice = voices.find(v => v.lang.startsWith(currentLang));
+          if (matchVoice) utterance.voice = matchVoice;
+        }
 
-      synth.speak(utterance);
+        utterance.onstart = () => setHaloState('speaking', text);
+        utterance.onend = () => setHaloState('idle', uiLang[currentLang].greeting);
+        utterance.onerror = () => setHaloState('idle', uiLang[currentLang].greeting);
+
+        synth.speak(utterance);
+      } catch (err) {
+        console.warn("La síntesis de voz falló o fue bloqueada:", err);
+        setHaloState('idle', uiLang[currentLang].greeting);
+      }
     }
 
     // Dynamic Engine to match query against Q&A Knowledge Base
     function processQuery(query) {
-      if (!query.trim()) return;
-
       appendMessage('user', query);
       searchInput.value = '';
       setHaloState('thinking', uiLang[currentLang].thinking);
@@ -696,11 +736,22 @@
       }, 550);
     }
 
-    // Events
-    // Evita que el clic dentro del menú se propague al fondo y lo cierre
-langMenu.addEventListener('click', (e) => {
-  e.stopPropagation();
-});
+    // BUG FIX: Envío de mensaje robusto
+    function submitMessage() {
+      const val = searchInput.value;
+      if (val && val.trim() !== '') {
+        processQuery(val);
+      }
+    }
+
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submitMessage();
+      }
+    });
+
+    sendBtn.addEventListener('click', submitMessage);
 
     const triggerVoice = () => {
       if (recognition) {
