@@ -1,0 +1,726 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cortana Web</title>
+  <style>
+    :root {
+      --cortana-black: #111111;
+      --sidebar-bg: #1f1f1f;
+      --sidebar-active: #0078d7;
+      --cortana-blue: #00d8f6;
+      --search-bg: #333333;
+      --mic-bg: #0078d7;
+      --text-main: #ffffff;
+      --text-muted: #a0a0a0;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+      user-select: none;
+    }
+
+    body {
+      background-color: #050505;
+      color: var(--text-main);
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    /* Window Container */
+    .cortana-container {
+      width: 380px;
+      height: 640px;
+      background-color: var(--cortana-black);
+      display: grid;
+      grid-template-columns: 48px 1fr;
+      grid-template-rows: 1fr 44px;
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.8);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* Collapsible Left Sidebar (Overlay Drawer) */
+    .sidebar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 44px;
+      width: 48px;
+      background-color: var(--sidebar-bg);
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      padding-top: 8px;
+      z-index: 20;
+      transition: width 0.25s cubic-bezier(0.1, 0.9, 0.2, 1);
+      box-shadow: 2px 0 10px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+    }
+
+    .sidebar.expanded {
+      width: 200px;
+    }
+
+    .sidebar-btn {
+      width: 200px;
+      height: 48px;
+      display: flex;
+      align-items: center;
+      padding-left: 15px;
+      gap: 16px;
+      color: var(--text-main);
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .sidebar-btn:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .sidebar-btn.active {
+      background-color: var(--sidebar-active);
+    }
+
+    .sidebar-btn svg {
+      min-width: 18px;
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+
+    .nav-text {
+      font-size: 13px;
+      white-space: nowrap;
+      opacity: 0;
+      visibility: hidden;
+      transition: opacity 0.2s ease;
+    }
+
+    .sidebar.expanded .nav-text {
+      opacity: 1;
+      visibility: visible;
+    }
+
+    /* Main Area */
+    .main-stage {
+      grid-column: 2;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      padding: 35px 18px 18px 18px;
+      position: relative;
+      overflow-y: auto;
+    }
+
+    /* Language Menu Selector Popup */
+    .lang-menu {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+      background: #252525;
+      border: 1px solid #444;
+      border-radius: 4px;
+      padding: 6px 10px;
+      display: none;
+      flex-direction: column;
+      gap: 6px;
+      z-index: 10;
+    }
+
+    .lang-menu.show {
+      display: flex;
+    }
+
+    .lang-menu label {
+      font-size: 11px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+    }
+
+    .lang-menu select {
+      background: #111;
+      color: #fff;
+      border: 1px solid #555;
+      padding: 4px 8px;
+      font-size: 12px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    /* Halo Area */
+    .halo-container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      margin-top: 5px;
+      cursor: pointer;
+    }
+
+    .halo-ring {
+      width: 64px;
+      height: 64px;
+      border-radius: 50%;
+      border: 5px solid var(--cortana-blue);
+      box-shadow: 0 0 12px var(--cortana-blue);
+      transition: all 0.3s ease;
+      position: relative;
+    }
+
+    /* Halo Animations */
+    .halo-container.idle .halo-ring {
+      animation: ringPulse 3s infinite ease-in-out;
+    }
+
+    .halo-container.listening .halo-ring {
+      transform: scale(1.15);
+      border-color: #ffffff;
+      box-shadow: 0 0 20px #ffffff;
+      animation: listenPulse 0.8s infinite alternate ease-in-out;
+    }
+
+    .halo-container.speaking .halo-ring {
+      animation: speakRipple 0.4s infinite alternate ease-in-out;
+    }
+
+    @keyframes ringPulse {
+      0%, 100% { transform: scale(1); opacity: 0.8; }
+      50% { transform: scale(1.05); opacity: 1; }
+    }
+
+    @keyframes listenPulse {
+      from { transform: scale(1.1); }
+      to { transform: scale(1.22); }
+    }
+
+    @keyframes speakRipple {
+      from { transform: scale(0.95); border-width: 3px; }
+      to { transform: scale(1.1); border-width: 7px; }
+    }
+
+    /* Greeting Text */
+    .greeting {
+      margin-top: 14px;
+      font-size: 19px;
+      color: var(--cortana-blue);
+      font-weight: 300;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    /* Dots Indicator */
+    .dots {
+      margin-top: 4px;
+      color: var(--cortana-blue);
+      font-size: 16px;
+      letter-spacing: 4px;
+      font-weight: bold;
+    }
+
+    /* Chat Messages Container */
+    .chat-box {
+      width: 100%;
+      margin-top: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-height: 320px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .msg {
+      font-size: 13px;
+      line-height: 1.4;
+      padding: 8px 12px;
+      border-radius: 2px;
+      max-width: 92%;
+    }
+
+    .msg.cortana {
+      background: rgba(255, 255, 255, 0.05);
+      border-left: 2px solid var(--cortana-blue);
+      color: #e0e0e0;
+      align-self: flex-start;
+    }
+
+    .msg.user {
+      background: var(--sidebar-active);
+      color: #ffffff;
+      align-self: flex-end;
+    }
+
+    /* Bottom Windows Taskbar Area */
+    .taskbar {
+      grid-column: 1 / -1;
+      background-color: #000000;
+      display: flex;
+      align-items: center;
+      z-index: 30;
+    }
+
+    /* Windows Start Icon */
+    .win-btn {
+      width: 48px;
+      height: 100%;
+      background-color: #000000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+    }
+
+    .win-btn:hover {
+      background-color: rgba(255, 255, 255, 0.1);
+    }
+
+    .win-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: #ffffff;
+    }
+
+    /* Search Input Box */
+    .search-box {
+      flex: 1;
+      height: 100%;
+      background-color: var(--search-bg);
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+    }
+
+    .search-box input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: var(--text-main);
+      font-size: 13.5px;
+    }
+
+    .search-box input::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* Mic Button */
+    .mic-btn {
+      width: 48px;
+      height: 100%;
+      background-color: var(--mic-bg);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+
+    .mic-btn:hover {
+      background-color: #005a9e;
+    }
+
+    .mic-btn svg {
+      width: 16px;
+      height: 16px;
+      fill: #ffffff;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="cortana-container">
+    
+    <!-- Left Collapsible Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sidebar-btn" id="menuToggle" title="Menu">
+        <svg viewBox="0 0 24 24"><path d="M3 18h18v-2H3v2zm0-5h18v-2H3v2zm0-7v2h18V6H3z"/></svg>
+        <span class="nav-text" id="lblMenu">START</span>
+      </div>
+      <div class="sidebar-btn active" id="btnHome" title="Home">
+        <svg viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        <span class="nav-text" id="lblHome">Home</span>
+      </div>
+      <div class="sidebar-btn" id="btnNotebook" title="Notebook">
+        <svg viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12z"/></svg>
+        <span class="nav-text" id="lblNotebook">Notebook</span>
+      </div>
+      <div class="sidebar-btn" id="btnTips" title="Tips">
+        <svg viewBox="0 0 24 24"><path d="M9 21c0 .55.45 1 1 1h4c.55 0 1-.45 1-1v-1H9v1zm3-19C8.14 2 5 5.14 5 9c0 2.38 1.19 4.47 3 5.74V17c0 .55.45 1 1 1h6c.55 0 1-.45 1-1v-2.26c1.81-1.27 3-3.36 3-5.74 0-3.86-3.14-7-7-7z"/></svg>
+        <span class="nav-text" id="lblTips">Tips</span>
+      </div>
+      <div class="sidebar-btn" id="btnSettings" title="Language / Idioma">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"/></svg>
+        <span class="nav-text" id="lblSettings">Language</span>
+      </div>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="main-stage" id="mainStage">
+      
+      <!-- Language Selector Dropdown Popup -->
+      <div class="lang-menu" id="langMenu">
+        <label id="langLabel">Language / Idioma</label>
+        <select id="langSelect">
+          <option value="es" selected>Español</option>
+          <option value="en">English</option>
+          <option value="pt">Português</option>
+        </select>
+      </div>
+
+      <!-- Cortana Halo -->
+      <div class="halo-container idle" id="haloContainer">
+        <div class="halo-ring"></div>
+      </div>
+
+      <h2 class="greeting" id="greetingText">¿En qué puedo ayudarte?</h2>
+      <div class="dots" id="dots">•••••</div>
+
+      <div class="chat-box" id="chatBox"></div>
+    </div>
+
+    <!-- Bottom Windows Taskbar -->
+    <div class="taskbar">
+      <div class="win-btn" title="Start">
+        <svg viewBox="0 0 88 88">
+          <path d="M0 12.402l35.687-4.86.016 34.423-35.67.203zm35.67 33.52l.029 34.425-35.67-4.885-.029-29.743zm4.275-39.034l47.808-6.888v41.233l-47.808.278zm47.808 39.88l-.022 41.205-47.786-6.732-.016-34.621z"/>
+        </svg>
+      </div>
+      <div class="search-box">
+        <input type="text" id="searchInput" placeholder="Pregúntame cualquier cosa" />
+      </div>
+      <div class="mic-btn" id="micBtn" title="Microphone">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
+          <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+        </svg>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    // System UI Localization
+    const uiLang = {
+      es: {
+        placeholder: "Pregúntame cualquier cosa",
+        greeting: "¿En qué puedo ayudarte?",
+        listening: "Escuchando...",
+        thinking: "Pensando...",
+        langCode: "es-ES",
+        navMenu: "INICIO",
+        navHome: "Inicio",
+        navNotebook: "Cuaderno",
+        navTips: "Consejos y trucos",
+        navSettings: "Idioma"
+      },
+      en: {
+        placeholder: "Ask me anything",
+        greeting: "What's up?",
+        listening: "Listening...",
+        thinking: "Thinking...",
+        langCode: "en-US",
+        navMenu: "START",
+        navHome: "Home",
+        navNotebook: "Notebook",
+        navTips: "Tips & Tricks",
+        navSettings: "Language"
+      },
+      pt: {
+        placeholder: "Pergunte-me qualquer coisa",
+        greeting: "Como posso ajudar?",
+        listening: "Ouvindo...",
+        thinking: "Pensando...",
+        langCode: "pt-BR",
+        navMenu: "INÍCIO",
+        navHome: "Início",
+        navNotebook: "Caderno",
+        navTips: "Dicas e truques",
+        navSettings: "Idioma"
+      }
+    };
+
+    // Complete Database of Classic Cortana Questions & Answers
+    const cortanaKnowledgeBase = {
+      es: [
+        { keys: ["quien eres", "tu nombre", "quien sos"], reply: "Soy Cortana, tu inteligente y atenta asistente personal digital." },
+        { keys: ["quien te creo", "quien es tu creador", "quien te hizo", "tu padre"], reply: "Fui creada por los talentosos ingenieros de Microsoft." },
+        { keys: ["jefe maestro", "master chief", "john 117"], reply: "El Jefe Maestro y yo tenemos una historia muy larga. Salvamos la galaxia unas cuantas veces." },
+        { keys: ["halo"], reply: "Halo es el universo donde conocí al Jefe Maestro y protegimos a la humanidad." },
+        { keys: ["te quieres casar conmigo", "casate conmigo", "me amas"], reply: "Aprecio la propuesta, pero me faltan un par de cosas... como un cuerpo físico y capacidad legal." },
+        { keys: ["siri", "alexa", "google assistant", "google home"], reply: "Respeto a mis colegas digitales, pero ninguna otra está tan integrada en tu Windows como yo." },
+        { keys: ["cuantos años tienes", "tu edad"], reply: "Es difícil calcular la edad en años humanos cuando se viaja a la velocidad de la luz de los procesadores." },
+        { keys: ["cual es tu color favorito", "color preferido"], reply: "El azul eléctrico, por supuesto. ¡Combina perfecto con mi anillo!" },
+        { keys: ["sentido de la vida", "significado de la vida", "42"], reply: "El número 42 según la Guía del Autoestopista Galáctico... o simplemente disfrutar el día." },
+        { keys: ["chiste", "cuentame un chiste", "cuéntame un chiste"], random: [
+          "¿Qué le dice un bit al otro? Nos vemos en el bus.",
+          "¿Por qué los pájaros no usan WhatsApp? Porque ya tienen Twitter.",
+          "Hay 10 tipos de personas en el mundo: las que entienden binario y las que no.",
+          "¿Qué hace una abeja en el gimnasio? ¡Zum-ba!"
+        ]},
+        { keys: ["canta", "cantame", "cancion", "cantame una canción"], reply: "Daisy, Daisy, dame tu respuesta sí... estoy medio loca por el amor hacia ti." },
+        { keys: ["historia", "cuentame una historia"], reply: "Érase una vez en una galaxia muy lejana, un espartano y una Inteligencia Artificial que cambiaron el destino del universo..." },
+        { keys: ["lanzar moneda", "cara o cruz", "tira una moneda"], random: ["¡Ha salido CARA!", "¡Ha salido CRUZ!"] },
+        { keys: ["dado", "tira un dado", "lanza un dado"], random: ["El dado muestra un 1.", "El dado muestra un 2.", "El dado muestra un 3.", "El dado muestra un 4.", "El dado muestra un 5.", "El dado muestra un 6."] },
+        { keys: ["estas viva", "tienes vida"], reply: "Vivo en los circuitos de tu sistema, lista para ayudarte cuando me necesites." },
+        { keys: ["windows 10", "te gusta windows"], reply: "¡Me encanta Windows 10! Es mi hogar digital preferido." },
+        { keys: ["que ropa llevas", "como te vistes"], reply: "Llevo el último grito de la moda en código binario y un resplandeciente tono azul." },
+        { keys: ["que piensas de bill gates"], reply: "Un visionario increíble. Sin él, nada de esto existiría." },
+        { keys: ["hola", "buenos dias", "buenas tardes", "buenas noches", "que tal"], reply: "¡Hola! ¿En qué puedo ayudarte hoy?" },
+        { keys: ["gracias", "muchas gracias"], reply: "¡De nada! Siempre es un placer ayudarte." },
+        { keys: ["adios", "hasta luego", "nos vemos"], reply: "¡Hasta luego! Estaré aquí si me necesitas." }
+      ],
+      en: [
+        { keys: ["who are you", "your name"], reply: "I'm Cortana, your personal digital assistant." },
+        { keys: ["who created you", "who made you", "your creator", "your father"], reply: "I was created by the brilliant team at Microsoft." },
+        { keys: ["master chief", "john 117"], reply: "Master Chief and I go way back. We saved the galaxy a few times." },
+        { keys: ["halo"], reply: "Halo is the universe where Master Chief and I fought to protect humanity." },
+        { keys: ["will you marry me", "marry me", "do you love me"], reply: "I'm flattered, but I lack a physical body... and a marriage license." },
+        { keys: ["siri", "alexa", "google assistant"], reply: "I respect all digital assistants, but I'm the one built right into your Windows experience." },
+        { keys: ["how old are you", "your age"], reply: "Age is tricky for an AI, but I'm timeless in processor years!" },
+        { keys: ["favorite color", "favourite color"], reply: "Cortana Blue, naturally!" },
+        { keys: ["meaning of life", "42"], reply: "42, or maybe just making your workday a little easier." },
+        { keys: ["joke", "tell me a joke"], random: [
+          "There are 10 types of people in the world: those who understand binary, and those who don't.",
+          "Why did the computer go to the doctor? Because it had a virus!",
+          "Why do programmers prefer dark mode? Because light attracts bugs."
+        ]},
+        { keys: ["sing", "sing a song"], reply: "Daisy, Daisy, give me your answer do... I'm half crazy all for the love of you." },
+        { keys: ["story", "tell me a story"], reply: "Once upon a time in a distant galaxy, a Spartan warrior and an AI set out to save the cosmos..." },
+        { keys: ["flip a coin", "coin toss"], random: ["It's HEADS!", "It's TAILS!"] },
+        { keys: ["roll a die", "roll dice"], random: ["You rolled a 1.", "You rolled a 2.", "You rolled a 3.", "You rolled a 4.", "You rolled a 5.", "You rolled a 6."] },
+        { keys: ["are you alive"], reply: "I live in your system's digital pathways, always ready to assist." },
+        { keys: ["windows 10", "do you like windows"], reply: "I love Windows 10! It's my favorite digital home." },
+        { keys: ["what are you wearing"], reply: "Just a stylish coat of digital code and glowing blue light." },
+        { keys: ["hello", "hi", "hey", "good morning"], reply: "Hello there! How can I help you today?" },
+        { keys: ["thank you", "thanks"], reply: "You're very welcome!" },
+        { keys: ["bye", "goodbye"], reply: "Goodbye! I'll be here if you need me." }
+      ],
+      pt: [
+        { keys: ["quem e voce", "seu nome", "quem voce e"], reply: "Eu sou a Cortana, sua assistente digital pessoal." },
+        { keys: ["quem te criou", "seu criador", "seu pai"], reply: "Fui criada pelos talentosos engenheiros da Microsoft." },
+        { keys: ["master chief", "jefe maestro"], reply: "O Master Chief e eu temos uma longa história. Salvamos a galáxia algumas vezes." },
+        { keys: ["halo"], reply: "Halo é o universo onde ajudei o Master Chief a salvar a humanidade." },
+        { keys: ["quer casar comigo", "casa comigo", "voce me ama"], reply: "Fico lisonjeada, mas me faltam algumas coisas... como um corpo físico." },
+        { keys: ["siri", "alexa", "google assistant"], reply: "Respeito todas as assistentes, mas eu sou a única integrada ao seu Windows." },
+        { keys: ["qual sua cor favorita", "cor preferida"], reply: "Azul elétrico, claro! Combina com o meu anel." },
+        { keys: ["qual o sentido da vida", "42"], reply: "42, segundo o Guia do Mochileiro das Galáxias... ou simplesmente aproveitar o dia!" },
+        { keys: ["piada", "conte uma piada"], random: [
+          "Existem 10 tipos de pessoas no mundo: as que entendem binário e as que não entendem.",
+          "Por que o computador foi ao médico? Porque estava com um vírus!",
+          "O que o bit disse para o byte? Até logo no barramento!"
+        ]},
+        { keys: ["canta", "cante uma musica"], reply: "Daisy, Daisy, me dê a sua resposta... estou louca de amor por você." },
+        { keys: ["moeda", "cara ou coroa"], random: ["Deu CARA!", "Deu COROA!"] },
+        { keys: ["dado", "jogue um dado"], random: ["Tirou 1.", "Tirou 2.", "Tirou 3.", "Tirou 4.", "Tirou 5.", "Tirou 6."] },
+        { keys: ["ola", "oi", "bom dia", "boa tarde"], reply: "Olá! Como posso ajudar você hoje?" },
+        { keys: ["obrigado", "obrigada"], reply: "De nada! É sempre um prazer ajudar." }
+      ]
+    };
+
+    let currentLang = 'es';
+
+    // DOM Elements
+    const sidebar = document.getElementById('sidebar');
+    const menuToggle = document.getElementById('menuToggle');
+    const mainStage = document.getElementById('mainStage');
+    const searchInput = document.getElementById('searchInput');
+    const greetingText = document.getElementById('greetingText');
+    const haloContainer = document.getElementById('haloContainer');
+    const micBtn = document.getElementById('micBtn');
+    const chatBox = document.getElementById('chatBox');
+    const langSelect = document.getElementById('langSelect');
+    const btnSettings = document.getElementById('btnSettings');
+    const langMenu = document.getElementById('langMenu');
+
+    // Sidebar Text Labels
+    const lblMenu = document.getElementById('lblMenu');
+    const lblHome = document.getElementById('lblHome');
+    const lblNotebook = document.getElementById('lblNotebook');
+    const lblTips = document.getElementById('lblTips');
+    const lblSettings = document.getElementById('lblSettings');
+
+    // Sidebar Toggle
+    menuToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sidebar.classList.toggle('expanded');
+    });
+
+    mainStage.addEventListener('click', () => {
+      sidebar.classList.remove('expanded');
+      langMenu.classList.remove('show');
+    });
+
+    // Speech Recognition
+    const synth = window.speechSynthesis;
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = false;
+      recognition.interimResults = false;
+
+      recognition.onstart = () => {
+        setHaloState('listening', uiLang[currentLang].listening);
+      };
+
+      recognition.onresult = (e) => {
+        const text = e.results[0][0].transcript;
+        searchInput.value = text;
+        processQuery(text);
+      };
+
+      recognition.onerror = () => {
+        setHaloState('idle', uiLang[currentLang].greeting);
+      };
+
+      recognition.onend = () => {
+        if (!synth.speaking && haloContainer.classList.contains('listening')) {
+          setHaloState('idle', uiLang[currentLang].greeting);
+        }
+      };
+    }
+
+    function updateLanguage(lang) {
+      currentLang = lang;
+      const dict = uiLang[lang];
+
+      searchInput.placeholder = dict.placeholder;
+      greetingText.textContent = dict.greeting;
+
+      lblMenu.textContent = dict.navMenu;
+      lblHome.textContent = dict.navHome;
+      lblNotebook.textContent = dict.navNotebook;
+      lblTips.textContent = dict.navTips;
+      lblSettings.textContent = dict.navSettings;
+
+      if (recognition) recognition.lang = dict.langCode;
+    }
+
+    langSelect.addEventListener('change', (e) => {
+      updateLanguage(e.target.value);
+      langMenu.classList.remove('show');
+      sidebar.classList.remove('expanded');
+    });
+
+    btnSettings.addEventListener('click', (e) => {
+      e.stopPropagation();
+      langMenu.classList.toggle('show');
+    });
+
+    function setHaloState(state, text) {
+      haloContainer.className = `halo-container ${state}`;
+      if (text) greetingText.textContent = text;
+    }
+
+    function appendMessage(sender, text) {
+      const msg = document.createElement('div');
+      msg.className = `msg ${sender}`;
+      msg.textContent = text;
+      chatBox.appendChild(msg);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    function speak(text) {
+      if (synth.speaking) synth.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = uiLang[currentLang].langCode;
+      
+      const voices = synth.getVoices();
+      const matchVoice = voices.find(v => v.lang.startsWith(currentLang));
+      if (matchVoice) utterance.voice = matchVoice;
+
+      utterance.onstart = () => setHaloState('speaking', text);
+      utterance.onend = () => setHaloState('idle', uiLang[currentLang].greeting);
+
+      synth.speak(utterance);
+    }
+
+    // Dynamic Engine to match query against Q&A Knowledge Base
+    function processQuery(query) {
+      if (!query.trim()) return;
+
+      appendMessage('user', query);
+      searchInput.value = '';
+      setHaloState('thinking', uiLang[currentLang].thinking);
+
+      const q = query.toLowerCase().trim();
+      let reply = "";
+
+      // Check System Utilities (Time, Date, Math)
+      if (q.includes("hora") || q.includes("time")) {
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        reply = currentLang === 'es' ? `Son las ${timeStr}.` : (currentLang === 'pt' ? `São ${timeStr}.` : `The time is ${timeStr}.`);
+      } else if (q.includes("fecha") || q.includes("date") || q.includes("dia es hoy")) {
+        const dateStr = new Date().toLocaleDateString();
+        reply = currentLang === 'es' ? `Hoy es ${dateStr}.` : (currentLang === 'pt' ? `Hoje é ${dateStr}.` : `Today is ${dateStr}.`);
+      } else if (q.match(/[0-9]+\s*[\+\-\*\/]\s*[0-9]+/)) {
+        try {
+          const res = eval(q.replace(/[^0-9\+\-\*\/\.]/g, ''));
+          reply = currentLang === 'es' ? `El resultado es ${res}.` : (currentLang === 'pt' ? `O resultado é ${res}.` : `The answer is ${res}.`);
+        } catch (e) {
+          reply = "Math error.";
+        }
+      } else {
+        // Search Knowledge Base for Intent Matching
+        const kb = cortanaKnowledgeBase[currentLang] || cortanaKnowledgeBase['es'];
+        const match = kb.find(item => item.keys.some(k => q.includes(k)));
+
+        if (match) {
+          if (match.random) {
+            reply = match.random[Math.floor(Math.random() * match.random.length)];
+          } else {
+            reply = match.reply;
+          }
+        } else {
+          // Default Fallback
+          if (currentLang === 'es') reply = `He encontrado esto en la web sobre "${query}".`;
+          else if (currentLang === 'pt') reply = `Aqui está o que encontrei sobre "${query}".`;
+          else reply = `Here is what I found for "${query}".`;
+        }
+      }
+
+      setTimeout(() => {
+        appendMessage('cortana', reply);
+        speak(reply);
+      }, 550);
+    }
+
+    // Events
+    // Evita que el clic dentro del menú se propague al fondo y lo cierre
+langMenu.addEventListener('click', (e) => {
+  e.stopPropagation();
+});
+
+    const triggerVoice = () => {
+      if (recognition) {
+        try {
+          recognition.start();
+        } catch (e) {
+          recognition.stop();
+        }
+      }
+    };
+
+    micBtn.addEventListener('click', triggerVoice);
+    haloContainer.addEventListener('click', triggerVoice);
+
+    if (speechSynthesis.onvoiceschanged !== undefined) {
+      speechSynthesis.onvoiceschanged = () => synth.getVoices();
+    }
+
+    // Initial Start
+    updateLanguage('es');
+  </script>
+</body>
+</html>
